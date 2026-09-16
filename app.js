@@ -105,6 +105,7 @@ const els = {
   resultTotal: document.getElementById("resultTotal"),
   resultCompleted: document.getElementById("resultCompleted"),
   resultDuration: document.getElementById("resultDuration"),
+  downloadPdfButton: document.getElementById("downloadPdfButton"),
   newAttemptButton: document.getElementById("newAttemptButton")
 };
 
@@ -259,6 +260,106 @@ function formatDuration(totalSeconds) {
   const secondsPart = seconds % 60;
   if (minutesPart === 0) return secondsPart + " sec";
   return minutesPart + " min " + secondsPart + " sec";
+}
+
+function pdfSafeText(value) {
+  return String(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, "-")
+    .replace(/[^\x20-\x7E]/g, "?")
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)");
+}
+
+function shortenedPdfText(value, maximumLength) {
+  const text = String(value);
+  return text.length > maximumLength ? text.slice(0, maximumLength - 3) + "..." : text;
+}
+
+function buildResultsPdf(details) {
+  const commands = [];
+  function addText(text, x, y, size, font, color) {
+    commands.push((color || "0.09 0.13 0.24") + " rg");
+    commands.push("BT /" + (font || "F1") + " " + size + " Tf " + x + " " + y + " Td (" + pdfSafeText(text) + ") Tj ET");
+  }
+
+  addText("BIOPHARMACEUTICS AND PHARMACOKINETICS", 72, 730, 10, "F2", "0.22 0.62 0.66");
+  addText("Post-Lecture Check-in Quiz", 72, 697, 24, "F2", "0.06 0.09 0.18");
+  addText("Overall Results", 72, 670, 15, "F1", "0.38 0.44 0.55");
+  commands.push("0.88 0.90 0.94 RG 1 w 72 650 m 540 650 l S");
+
+  addText("STUDENT", 72, 615, 9, "F2", "0.38 0.44 0.55");
+  addText(shortenedPdfText(details.name, 55), 72, 593, 16, "F2", "0.06 0.09 0.18");
+  addText("SECTION", 340, 615, 9, "F2", "0.38 0.44 0.55");
+  addText(shortenedPdfText(details.section, 24), 340, 593, 16, "F2", "0.06 0.09 0.18");
+
+  commands.push("0.97 0.97 0.99 rg 72 445 468 108 re f");
+  addText("TOTAL SCORE", 96, 522, 10, "F2", "0.38 0.44 0.55");
+  addText(details.totalScore, 96, 474, 40, "F2", "0.98 0.10 0.56");
+  addText("PERCENTAGE", 355, 522, 10, "F2", "0.38 0.44 0.55");
+  addText(details.percentage, 355, 474, 40, "F2", "0.98 0.10 0.56");
+
+  addText("COMPLETED", 72, 395, 9, "F2", "0.38 0.44 0.55");
+  addText(details.completed, 72, 371, 14, "F1", "0.06 0.09 0.18");
+  addText("TIME USED", 72, 326, 9, "F2", "0.38 0.44 0.55");
+  addText(details.duration, 72, 302, 14, "F1", "0.06 0.09 0.18");
+
+  commands.push("0.88 0.90 0.94 RG 1 w 72 105 m 540 105 l S");
+  addText("Lesson 2.1 - Biopharmaceutic Factors Affecting Drug Product", 72, 80, 9, "F1", "0.38 0.44 0.55");
+  addText("Ricardo Jr. N. Arellano", 72, 63, 9, "F1", "0.38 0.44 0.55");
+
+  const content = commands.join("\n") + "\n";
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>",
+    "<< /Length " + content.length + " >>\nstream\n" + content + "endstream",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
+    "<< /Title (Post-Lecture Check-in Quiz Results) /Author (Ricardo Jr. N. Arellano) /Creator (Biopharmaceutic Factors Timed Quiz) >>"
+  ];
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach(function (object, index) {
+    offsets[index + 1] = pdf.length;
+    pdf += (index + 1) + " 0 obj\n" + object + "\nendobj\n";
+  });
+  const xrefOffset = pdf.length;
+  pdf += "xref\n0 " + (objects.length + 1) + "\n";
+  pdf += "0000000000 65535 f \n";
+  for (let index = 1; index <= objects.length; index += 1) {
+    pdf += String(offsets[index]).padStart(10, "0") + " 00000 n \n";
+  }
+  pdf += "trailer\n<< /Size " + (objects.length + 1) + " /Root 1 0 R /Info 7 0 R >>\n";
+  pdf += "startxref\n" + xrefOffset + "\n%%EOF";
+  return new TextEncoder().encode(pdf);
+}
+
+function downloadResultsPdf() {
+  const details = {
+    name: els.resultName.textContent,
+    section: els.resultSection.textContent,
+    totalScore: els.resultTotal.textContent,
+    percentage: els.resultPercent.textContent,
+    completed: els.resultCompleted.textContent,
+    duration: els.resultDuration.textContent
+  };
+  const bytes = buildResultsPdf(details);
+  const blob = new Blob([bytes], {type:"application/pdf"});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const safeName = state.studentName.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "") || "Student";
+  link.href = url;
+  link.download = safeName + "_Check-in_Quiz_Results.pdf";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
 }
 
 function updateTimer() {
@@ -448,6 +549,7 @@ async function toggleSound() {
 els.studentForm.addEventListener("submit", startQuiz);
 els.nextButton.addEventListener("click", nextQuestion);
 els.resetButton.addEventListener("click", function () { returnToStart(true); });
+els.downloadPdfButton.addEventListener("click", downloadResultsPdf);
 els.newAttemptButton.addEventListener("click", function () { returnToStart(false); });
 els.musicButton.addEventListener("click", toggleMusic);
 els.soundButton.addEventListener("click", toggleSound);

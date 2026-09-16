@@ -13,7 +13,7 @@ The test bank contains 40 multiple-choice questions:
 
 Each attempt randomly selects 10 recall and 5 understanding questions, then shuffles the question order and answer choices. The site avoids repeating the exact same question selection on consecutive attempts in the same browser.
 
-Students must enter their name and section before starting. The entire 15-item attempt has one 15-minute timer. The results screen shows the total score, percentage, student information, completion date and time, and elapsed time.
+Students must enter their name and section before starting. The entire 15-item attempt has one 15-minute timer. The results screen shows the total score, percentage, student information, completion date and time, and elapsed time. Students can download these overall results as a one-page PDF.
 
 The quiz retains the quiz-bee background music, correct and incorrect sound effects, a five-second warning, and a buzzer when time expires.
 
